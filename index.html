@@ -1,0 +1,717 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AFL Manager V7 — </title>
+<style>
+:root{--bg:#09111e;--panel:#101b2d;--card:#17253b;--line:#2a3b57;--text:#edf4ff;--muted:#9cafc8;--accent:#55a8ff;--good:#49d597;--bad:#ff7474;--gold:#ffd166}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(135deg,#07101c,#101a2c);color:var(--text);font:14px system-ui,-apple-system,Segoe UI,Arial}
+button,input,select{font:inherit}button{border:1px solid var(--line);background:#182a44;color:var(--text);border-radius:8px;padding:9px 12px;cursor:pointer}button:hover{background:#223958}button.primary{background:var(--accent);color:#06111d;border-color:var(--accent);font-weight:800}button.good{background:#164a3a;border-color:#27785d}button.danger{background:#4b2028;border-color:#71303a}
+header{padding:16px 20px;border-bottom:1px solid var(--line);background:#0d1728;display:flex;justify-content:space-between;gap:15px;align-items:center}.brand{font-size:22px;font-weight:900}.sub,.muted{color:var(--muted)}.small{font-size:12px}
+.wrap{max-width:1280px;margin:auto;padding:15px}.tabs{display:flex;gap:7px;overflow:auto;margin-bottom:15px}.tabs button{white-space:nowrap}.tabs button.active{background:var(--accent);color:#06111d}
+.grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:12px}.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;min-width:0}.s3{grid-column:span 3}.s4{grid-column:span 4}.s6{grid-column:span 6}.s8{grid-column:span 8}.s9{grid-column:span 9}.s12{grid-column:span 12}
+h1,h2,h3,p{margin:0}h2{font-size:18px;margin-bottom:9px}h3{font-size:14px;margin-bottom:6px}.kpi{font-size:28px;font-weight:900}.row{display:flex;align-items:center;justify-content:space-between;gap:10px}.actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:11px}.badge{font-size:11px;padding:4px 7px;background:#203452;border-radius:99px;color:#bdd9ff}.goodtxt{color:var(--good)}.badtxt{color:var(--bad)}.gold{color:var(--gold)}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px 5px;border-bottom:1px solid #22334d;font-size:12px;white-space:nowrap}th{color:var(--muted)}.scroll{overflow:auto;max-height:570px}.bar{height:7px;background:#263852;border-radius:99px;overflow:hidden}.bar i{display:block;height:100%;background:var(--accent)}.notice{padding:10px;background:#15263d;border:1px solid #284363;border-radius:9px;margin-top:9px}.listitem{padding:8px 0;border-bottom:1px solid #23344d}.listitem:last-child{border-bottom:0}.statgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.stat{background:#142238;border:1px solid #243754;border-radius:8px;padding:8px}.score{font-size:25px;font-weight:900}.q{padding:8px;border-left:3px solid var(--accent);background:#13233a;margin:6px 0}.event{padding:6px 0;border-bottom:1px solid #22324b}.selected{background:#163f36;border-color:#2d8065}.statgrid button{min-height:48px}.modal{position:fixed;inset:0;background:#0009;display:none;align-items:center;justify-content:center;padding:15px;z-index:10}.modal.show{display:flex}.modalbox{max-width:760px;width:100%;max-height:90vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
+@media(max-width:850px){.s3,.s4,.s6,.s8,.s9{grid-column:span 12}.statgrid{grid-template-columns:1fr 1fr}header{align-items:flex-start;flex-direction:column}}
+</style>
+</head>
+<body>
+<header><div><div class="brand">🏉 AFL Manager</div><div class="sub">Career management • tactics • list building • draft • trades • match engine</div></div><div id="top"></div></header>
+<div class="wrap"><div id="tabs" class="tabs"></div><main id="app"></main></div><div id="modal" class="modal"></div>
+<script>
+const CLUBS=["Adelaide","Brisbane","Carlton","Collingwood","Essendon","Fremantle","Geelong","Gold Coast","GWS","Hawthorn","Melbourne","North Melbourne","Port Adelaide","Richmond","St Kilda","Sydney","West Coast","Western Bulldogs"];
+const POS=["DEF","DEF","DEF","MID","MID","MID","FWD","FWD","RUC","DEF","MID","FWD","MID","DEF","FWD","MID","DEF","MID","FWD","RUC","DEF","MID","FWD","MID","DEF","FWD","MID","DEF","MID","FWD","MID","DEF","FWD","MID","DEF","FWD","MID","DEF","MID","FWD"];
+const FIRST=["Jack","Tom","Will","Max","Sam","Charlie","Liam","Harry","Cooper","Noah","Josh","Ben","Luke","James","Oscar","Mitch","Caleb","Bailey","Finn","Jai","Rhys","Isaac","Oliver","Ethan","Jake","Riley","Archie","Lachie","Angus","Nick","Zac","Jett","Cameron","Luca","Kai","Hudson","Jesse","Blake","Rory","Ned"];
+const LAST=["Anderson","Bennett","Brown","Campbell","Carter","Clarke","Davis","Edwards","Fisher","Fleming","Graham","Harris","Henderson","Hughes","Jones","Kelly","King","Lewis","Martin","McDonald","Miller","Moore","Murphy","Parker","Reid","Roberts","Scott","Taylor","Walker","Wilson","Young","Morris","Stewart","Turner","Ward","White","Wright","Adams","Baker","Collins"];
+const TRAITS=["Professional","Leader","Loyal","Ambitious","Team player","Competitive","Mercurial","Injury-prone","Homebody"];
+const COACHES=["Alex Morgan","Chris Bennett","Jordan Lee","Matt Carter","Ryan Walsh","Dylan Grant"];
+const EVENTS=["A young prospect is pushing for senior selection.","The playing group responds well to your game plan.","A veteran has taken a younger player under their wing.","Recruiters report strong interest in the upcoming draft class.","Your fitness staff recommend a lighter recovery block."];
+let S={tab:"Home",club:"Carlton",season:2026,round:1,wins:0,losses:0,draws:0,points:0, cash:12.0, salary:8.5, cap:14.0, morale:72, fitness:90, board:62, coach:70, reputation:50, gamePlan:"Balanced",attack:"Balanced",defence:"Balanced",clearance:"Balanced",selected:[],bench:[],lineup:{DEF:[],MID:[],RUC:[],FWD:[]},finals:null,clubAI:{},news:[],retirements:[],draftClass:[],staff:{coach:"Alex Morgan",fitness:70,recruiting:65,development:65,medical:65},players:[],draft:[],draftPick:0,contracts:{},trades:[],log:[],history:[],awards:[],seasonDone:false};
+
+function uid(){return Math.random().toString(36).slice(2,9)}
+function rnd(a,b){return Math.floor(Math.random()*(b-a+1))+a}
+function clamp(n,a,b){return Math.max(a,Math.min(b,n))}
+function roleFor(pos){
+  const map={DEF:["Full Back","Intercept Defender","General Defender"],MID:["Inside Mid","Outside Mid","Wing"],RUC:["Ruck","Ruck Rover"],FWD:["Full Forward","CHF","Small Forward"]};
+  const a=map[pos]||map.MID; return a[rnd(0,a.length-1)];
+}
+function ensureAI(){
+  if(Object.keys(S.clubAI||{}).length)return;
+  S.clubAI={};
+  CLUBS.forEach(c=>S.clubAI[c]={coach:["Defensive","Fast","Possession","Development"][rnd(0,3)],window:["Rebuild","Balanced","Contender"][rnd(0,2)],needs:[POS[rnd(0,POS.length-1)],POS[rnd(0,POS.length-1)]],cap:rnd(8,14),aggression:rnd(35,85)});
+}
+function makePlayers(){
+ let a=[]; for(let i=0;i<40;i++){let age=rnd(18,32), o=60+rnd(0,31)-(age>28?Math.floor((age-28)*1.5):0);o=clamp(o,48,91);let pot=clamp(o+rnd(2,16)-(age>25?rnd(0,7):0),o,95);
+ a.push({id:uid(),name:FIRST[i]+" "+LAST[i],pos:POS[i],age,ovr:o,pot,trait:TRAITS[rnd(0,TRAITS.length-1)],fitness:rnd(78,100),morale:rnd(60,90),form:rnd(55,85),speed:rnd(55,95),kick:rnd(55,95),mark:rnd(55,95),tackle:rnd(50,95),clear:rnd(45,95),decision:rnd(50,95),goals:0,disp:0,marks:0,tackles:0,clearances:0,injury:0,contract:rnd(1,4),salary:+(0.12+o*.004).toFixed(2),team:""});
+ } return a;
+}
+function newDraft(){return Array.from({length:60},(_,i)=>({name:FIRST[(i+7)%FIRST.length]+" "+LAST[(i*3+11)%LAST.length],age:rnd(18,21),pos:POS[i%POS.length],ovr:rnd(55,72),pot:rnd(74,95),speed:rnd(60,96),kick:rnd(55,95),mark:rnd(50,90),clear:rnd(45,92)}))}
+function init(){ if(!localStorage.getItem("aflManagerV7") && localStorage.getItem("aflManagerV7")) localStorage.setItem("aflManagerV7",localStorage.getItem("aflManagerV7"));
+ let x=localStorage.getItem("aflManagerV7");
+ if(x){try{S=JSON.parse(x)}catch(e){}}
+ if(!S.players||!S.players.length)S.players=makePlayers();
+ S.players.forEach((p,i)=>{p.team=p.team||S.club;p.role=p.role||roleFor(p.pos);p.games=p.games||0;p.careerGoals=p.careerGoals||0;p.careerDisp=p.careerDisp||0;p.careerAwards=p.careerAwards||0;p.injuryHistory=p.injuryHistory||0});
+ S.draft=S.draft||newDraft(); S.selected=S.selected||S.players.slice(0,22).map(p=>p.id);
+ S.lineup=S.lineup||{DEF:[],MID:[],RUC:[],FWD:[]}; S.bench=S.bench||[];
+ S.clubAI=S.clubAI||{}; ensureAI();
+ if(!S.draftClass)S.draftClass=S.draft;
+ S.news=S.news||[]; S.retirements=S.retirements||[];
+ save();
+}
+function save(){localStorage.setItem("aflManagerV7",JSON.stringify(S))}
+function clubPlayers(){return S.players.filter(p=>p.team===S.club||!p.team)}
+function teamList(){return S.players.filter(p=>p.team===S.club)}
+function strength(){let p=S.players.filter(p=>S.selected.includes(p.id));if(p.length<18)p=teamList().slice(0,22);if(!p.length)p=S.players.slice(0,22);return Math.round(p.reduce((a,x)=>a+x.ovr*(x.injury?0.6:1)*(x.fitness/100),0)/p.length+(S.coach-60)/5)}
+function opp(){let available=CLUBS.filter(x=>x!==S.club);return available[(S.round*5+CLUBS.indexOf(S.club))%available.length]}
+function ladder(){let rows=CLUBS.map(c=>({club:c,p:0,w:0,d:0,l:0,for:0,against:0}));let me=rows.find(x=>x.club===S.club);me.p=S.points;me.w=S.wins;me.d=S.draws;me.l=S.losses;me.for=S.history.reduce((a,x)=>a+x.for,0);me.against=S.history.reduce((a,x)=>a+x.against,0);
+ rows.filter(x=>x.club!==S.club).forEach((x,i)=>{x.w=rnd(4,15);x.l=23-x.w-rnd(0,2);x.d=23-x.w-x.l;x.p=x.w*4+x.d;x.for=rnd(1300,1900);x.against=rnd(1300,1900)});return rows.sort((a,b)=>b.p-a.p||(b.for-b.against)-(a.for-a.against))}
+function selectPlayer(id){let p=S.players.find(x=>x.id===id);if(!p||p.injury)return;if(S.selected.includes(id))S.selected=S.selected.filter(x=>x!==id);else if(S.selected.length<22)S.selected.push(id);save();render()}
+function train(type="skills"){let cost=type==="fitness"?0.08:0.12;S.cash=Math.max(0,S.cash-cost);S.players.filter(p=>p.team===S.club||!p.team).forEach(p=>{if(type==="skills"&&Math.random()<.55)p.ovr=clamp(p.ovr+(p.ovr<p.pot?1:0),48,95);if(type==="fitness")p.fitness=clamp(p.fitness+8,40,100);p.form=clamp(p.form+2,20,100)});S.morale=clamp(S.morale+2,20,100);S.log.unshift("Training: "+type+" block completed.");save();render()}
+function recover(){S.players.forEach(p=>{if(p.team===S.club||!p.team)p.fitness=clamp(p.fitness+10+Math.floor(S.staff.medical/20),0,100)});S.fitness=clamp(S.fitness+10,40,100);save();render()}
+function negotiate(p){if(p.contract<=1){let raise=p.salary*0.12;if(S.salary+raise<=S.cap){p.contract=rnd(2,4);p.salary=+(p.salary+raise).toFixed(2);S.salary=+(S.salary+raise).toFixed(2);S.log.unshift(p.name+" re-signed.");}else alert("Not enough salary-cap space.");save();render()}}
+function injuryCheck(){S.players.forEach(p=>{if(p.team===S.club&&p.injury===0&&Math.random()<0.06)p.injury=rnd(1,5)})}
+
+function lineupPlayers(){
+  const all=S.players.filter(p=>p.team===S.club);
+  const chosen=S.selected.map(id=>S.players.find(p=>p.id===id)).filter(Boolean).filter(p=>!p.injury);
+  return chosen.length>=18?chosen:all.filter(p=>!p.injury).slice(0,22);
+}
+function bestByPos(pos){
+  return lineupPlayers().filter(p=>p.pos===pos).sort((a,b)=>b.ovr-a.ovr);
+}
+function autoLineup(){
+  const pool=lineupPlayers(), used=new Set(), L={DEF:[],MID:[],RUC:[],FWD:[]};
+  const targets={DEF:7,MID:8,RUC:2,FWD:5};
+  Object.keys(targets).forEach(pos=>{
+    const candidates=pool.filter(p=>p.pos===pos).sort((a,b)=>b.ovr-a.ovr);
+    candidates.slice(0,targets[pos]).forEach(p=>{if(!used.has(p.id)){L[pos].push(p.id);used.add(p.id)}});
+  });
+  const remaining=pool.filter(p=>!used.has(p.id)).sort((a,b)=>b.ovr-a.ovr);
+  remaining.forEach(p=>{if(L.DEF.length<7)L.DEF.push(p.id);else if(L.MID.length<8)L.MID.push(p.id);else if(L.FWD.length<5)L.FWD.push(p.id);});
+  S.lineup=L;
+  const starters=Object.values(L).flat().slice(0,22);
+  S.selected=starters;
+  S.bench=pool.filter(p=>!starters.includes(p.id)).slice(0,4).map(p=>p.id);
+  save();render();
+}
+function playerRating(p,impact){
+  const base=(p.ovr*.38+p.decision*.12+p.kick*.10+p.mark*.08+p.tackle*.08+p.clear*.10+p.form*.08+p.fitness*.06);
+  return clamp(Math.round(base+impact),1,10);
+}
+function matchEvents(q, team, oppTeam, players){
+  const events=[]; const count=rnd(5,10);
+  for(let i=0;i<count;i++){
+    const p=players[rnd(0,players.length-1)];
+    const types=["inside 50","clearance","tackle","mark","shot","goal","behind","turnover"];
+    const type=types[rnd(0,types.length-1)];
+    if(type==="goal") events.push(`GOAL — ${p.name} (${p.pos})`);
+    else if(type==="behind") events.push(`Behind — ${p.name}`);
+    else events.push(`${type[0].toUpperCase()+type.slice(1)} — ${p.name}`);
+  }
+  return events;
+}
+function finalsBracket(){
+  const l=ladder(), top=l.slice(0,8).map(x=>x.club);
+  return {qualifying:[
+    {a:top[0],b:top[4],type:"QF1"},{a:top[1],b:top[3],type:"QF2"},
+    {a:top[2],b:top[5],type:"EF1"},{a:top[6],b:top[7],type:"EF2"}],top};
+}
+function simulateFinal(teamA,teamB,label){
+  const a=teamA===S.club?strength():70+rnd(-5,10), b=teamB===S.club?strength():70+rnd(-5,10);
+  const ascore=clamp(Math.round(a*1.25+rnd(-8,12)),35,120), bscore=clamp(Math.round(b*1.25+rnd(-8,12)),35,120);
+  return {label,a:teamA,b:teamB,ascore,bscore,winner:ascore>=bscore?teamA:teamB};
+}
+
+function aiRound(){
+  ensureAI();
+  CLUBS.filter(c=>c!==S.club).forEach(c=>{
+    const ai=S.clubAI[c];
+    if(Math.random()<.35){
+      const candidates=S.players.filter(p=>p.team!==S.club&&p.team!==c);
+      const target=candidates.find(p=>ai.needs.includes(p.pos));
+      if(target && target.ovr<88 && Math.random()<ai.aggression/100){
+        const old=target.team; target.team=c;
+        S.news.unshift(`${c} recruit ${target.name} to address a list need.`);
+        if(S.news.length>50)S.news.pop();
+      }
+    }
+  });
+}
+function refreshNews(result){
+  const headlines=[];
+  if(result.win)headlines.push(`${S.club} bank another win over ${result.opponent}.`);
+  else headlines.push(`${S.club} under pressure after defeat to ${result.opponent}.`);
+  if(result.best.rating>=8.5)headlines.push(`${result.best.name} produces a dominant performance (${result.best.rating.toFixed(1)}).`);
+  const young=S.players.filter(p=>p.team===S.club&&p.age<=21).sort((a,b)=>b.form-a.form)[0];
+  if(young&&young.form>85)headlines.push(`${young.name} is pushing hard for a breakout season.`);
+  S.news.unshift(...headlines);
+  S.news=S.news.slice(0,40);
+}
+function retireAndProgress(){
+  S.retirements=[];
+  S.players.forEach(p=>{
+    if(p.team===S.club && p.age>=32 && (p.ovr<68 || Math.random()<.28)){
+      p.team="RETIRED"; S.retirements.push(p.name); 
+    }
+  });
+  S.players.filter(p=>p.team===S.club).forEach(p=>{
+    if(p.age<24 && p.ovr<p.pot && Math.random()<.7)p.ovr++;
+    if(p.age>29)p.ovr=Math.max(45,p.ovr-rnd(0,2));
+    p.age++; p.contract--; p.injury=0; p.fitness=90; p.form=70;
+  });
+}
+function freeAgents(){
+  return S.players.filter(p=>p.team==="FREE AGENT");
+}
+function releasePlayer(id){
+  const p=S.players.find(x=>x.id===id);
+  if(!p||p.team!==S.club)return;
+  p.team="FREE AGENT"; S.selected=S.selected.filter(x=>x!==id);
+  S.salary=Math.max(0,+(S.salary-p.salary).toFixed(2));
+  S.news.unshift(`${p.name} has been released into free agency.`);
+  save();render();
+}
+function signFreeAgent(id){
+  const p=S.players.find(x=>x.id===id);
+  if(!p||p.team!=="FREE AGENT"||S.salary+p.salary>S.cap)return alert("Not enough salary-cap room.");
+  p.team=S.club;p.contract=rnd(1,3);S.salary=+(S.salary+p.salary).toFixed(2);
+  S.news.unshift(`${p.name} signs with ${S.club}.`);save();render();
+}
+function negotiateTrade(id){
+  const target=S.players.find(x=>x.id===id);
+  const offer=S.players.filter(p=>p.team===S.club).sort((a,b)=>b.ovr-a.ovr)[0];
+  if(!target||!offer)return;
+  const value=offer.ovr + (S.draft.length?5:0);
+  if(value+8>=target.ovr){
+    target.team=S.club;offer.team="FREE AGENT";
+    S.news.unshift(`Trade agreed: ${target.name} arrives for ${offer.name} and draft capital.`);
+    closeModal();save();render();
+  }else alert("They rejected the offer. Add a better player or more draft capital.");
+}
+function scoutProspect(i){
+  const p=S.draft[i]; if(!p)return;
+  p.scouted=true;
+  p.scoutText=p.pot>=88?"Elite upside":p.pot>=82?"Strong development case":p.pot>=76?"Useful prospect":"Project player";
+  save();render();
+}
+function simulateMatch(){
+ if(S.round>23){finishSeason();return}
+ if(S.selected.length<18)autoLineup();
+ const opponent=opp(), players=lineupPlayers(), my=strength();
+ const enemy=65+rnd(0,27)+Math.floor(S.round/4);
+ let totalFor=0,totalAgainst=0,quarters=[], momentum=0;
+ const teamFitness=players.reduce((a,p)=>a+p.fitness,0)/players.length;
+ for(let q=1;q<=4;q++){
+   let atk=my+(S.attack==="Aggressive"?5:S.attack==="Controlled"?-2:0)+(S.gamePlan==="Fast"?4:S.gamePlan==="Possession"?2:0)+rnd(-7,7)+momentum;
+   let def=enemy+(S.defence==="Press"?4:S.defence==="Conservative"?-2:0)+rnd(-7,7);
+   let clearBonus=S.clearance==="Aggressive"?4:S.clearance==="Defensive"?-1:0;
+   let gf=clamp(Math.round((atk+clearBonus)/13)+rnd(0,3),1,10);
+   let ga=clamp(Math.round(def/13)+rnd(0,3),1,9);
+   let fscore=gf*6+rnd(0,5), ascore=ga*6+rnd(0,5);
+   if(Math.random()<.22)fscore++; if(Math.random()<.22)ascore++;
+   totalFor+=fscore;totalAgainst+=ascore;
+   momentum=clamp(momentum+(fscore>ascore?2:-2),-6,6);
+   const events=matchEvents(q,S.club,opponent,players);
+   quarters.push({q,for:fscore,against:ascore,goals:gf,events});
+   players.forEach(p=>{
+     const involvement=(p.pos==="MID"?rnd(4,8):rnd(2,6))+(q===4?1:0);
+     p.disp+=involvement;
+     if(Math.random()<.18)p.goals++;
+     if(Math.random()<.45)p.marks++;
+     if(Math.random()<.4)p.tackles++;
+     if(p.pos==="MID"&&Math.random()<.5)p.clearances++;
+     p.fitness=clamp(p.fitness-rnd(3,8),30,100);
+   });
+ }
+ const win=totalFor>totalAgainst, draw=totalFor===totalAgainst;
+ if(win)S.wins++; else if(draw)S.draws++; else S.losses++;
+ S.points=S.wins*4+S.draws*2;
+ const playerRatings=players.map(p=>{
+   const involvement=(p.disp>30?1:p.disp>20?.5:0)+(p.goals*0.4)+(p.clearances*.08);
+   return {id:p.id,name:p.name,pos:p.pos,disposals:p.disp,goals:p.goals,marks:p.marks,tackles:p.tackles,clearances:p.clearances,rating:playerRating(p,involvement)};
+ });
+ playerRatings.sort((a,b)=>b.rating-a.rating);
+ players.forEach(p=>{p.form=clamp(p.form+(win?3:-2),20,100);if(p.injury)p.injury--});
+ injuryCheck();
+ S.morale=clamp(S.morale+(win?5:-4),20,100);
+ S.board=clamp(S.board+(win?3:-3),0,100);
+ S.cash=+(S.cash+(win?.15:.05)).toFixed(2);
+ players.forEach(p=>{p.games=(p.games||0)+1;p.careerGoals=(p.careerGoals||0)+p.goals;p.careerDisp=(p.careerDisp||0)+p.disp;});
+ aiRound();
+ const result={season:S.season,round:S.round,opponent,for:totalFor,against:totalAgainst,quarters,playerRatings,
+   best:playerRatings[0],win,draw,benchUsed:S.bench.slice(),fitness:Math.round(teamFitness)};
+ refreshNews(result); S.history.unshift(result);
+ S.log.unshift(`Round ${S.round}: ${S.club} ${totalFor} ${win?"defeated":draw?"drew with":"lost to"} ${opponent} ${totalAgainst} — BOG ${result.best.name} (${result.best.rating.toFixed(1)})`);
+ S.round++; save(); showMatch(result); render();
+}
+function showMatch(m){
+ modal(`<div class="row"><h2>${S.club} ${m.for} — ${m.against} ${m.opponent}</h2><button onclick="closeModal()">×</button></div>
+ <div class="notice"><div class="score">${m.win?"WIN":m.draw?"DRAW":"LOSS"}</div>
+ <div class="statgrid">${m.quarters.map(q=>`<div class="stat"><b>Q${q.q}</b><br>${q.for} - ${q.against}<div class="small" style="margin-top:5px">${q.events.slice(0,5).join("<br>")}</div></div>`).join("")}</div></div>
+ <h3 style="margin-top:13px">Player ratings</h3><table><tr><th>Player</th><th>Pos</th><th>Disposals</th><th>G</th><th>M</th><th>T</th><th>CLR</th><th>Rating</th></tr>
+ ${m.playerRatings.slice(0,22).map(p=>`<tr><td>${p.name}</td><td>${p.pos}</td><td>${p.disposals}</td><td>${p.goals}</td><td>${p.marks}</td><td>${p.tackles}</td><td>${p.clearances}</td><td><b>${p.rating.toFixed(1)}</b></td></tr>`).join("")}</table>
+ <div class="notice"><b>Best on Ground:</b> ${m.best.name} — ${m.best.rating.toFixed(1)} rating</div>
+ <div class="actions"><button class="primary" onclick="closeModal()">Continue</button></div>`);
+}
+function finishSeason(){
+ const l=ladder(), rank=l.findIndex(x=>x.club===S.club)+1;
+ S.finals={rank,qualified:rank<=8,stage:rank<=8?"Qualifying Finals":"Missed Finals",bracket:rank<=8?finalsBracket():null};
+ S.log.unshift(`${S.season} home-and-away season finished: ${rank}th. ${rank<=8?"Finals qualified.":"No finals."}`);
+ S.awards.push({season:S.season,rank,wins:S.wins,losses:S.losses,board:S.board});
+ if(rank<=8) showFinals();
+ else startOffseason();
+}
+function showFinals(){
+ const b=S.finals.bracket;
+ modal(`<div class="row"><h2>${S.season} Finals</h2><button onclick="closeModal()">×</button></div>
+ <div class="notice"><b>Top 8:</b> ${b.top.map((x,i)=>`${i+1}. ${x}`).join(" · ")}</div>
+ <h3 style="margin-top:12px">Finals bracket</h3>
+ ${b.qualifying.map(g=>`<div class="q"><b>${g.type}</b> — ${g.a} vs ${g.b}</div>`).join("")}
+ <div class="actions"><button class="primary" onclick="playFinals()">Simulate Finals</button></div>`);
+}
+function playFinals(){
+ const b=S.finals.bracket, games=b.qualifying.map(g=>simulateFinal(g.a,g.b,g.type));
+ const semi=[games[0].winner,games[1].winner,games[2].winner,games[3].winner];
+ const s1=simulateFinal(semi[0],semi[2],"SF1"),s2=simulateFinal(semi[1],semi[3],"SF2");
+ const prelim=simulateFinal(s1.winner,s2.winner,"PRELIM");
+ const gf=simulateFinal(prelim.winner,semi.includes(S.club)?S.club:semi[0],"GRAND FINAL");
+ S.finals.results=[...games,s1,s2,prelim,gf]; S.finals.champion=gf.winner;
+ modal(`<div class="row"><h2>Finals Results</h2><button onclick="closeModal()">×</button></div>
+ ${S.finals.results.map(g=>`<div class="q"><b>${g.label}</b> — ${g.a} ${g.ascore} def ${g.b} ${g.bscore}</div>`).join("")}
+ <div class="notice gold"><b>Premiers: ${gf.winner}</b></div>
+ <div class="actions"><button class="primary" onclick="closeModal();startOffseason()">Start Offseason</button></div>`);
+}
+function startOffseason(){
+ retireAndProgress();
+ const rank=S.finals?.rank||1;
+ S.reputation=clamp(S.reputation+(rank<=4?6:rank<=8?3:rank>12?-5:0),0,100);
+ S.season++;S.round=1;S.wins=0;S.losses=0;S.draws=0;S.points=0;S.finals=null;
+ S.players.filter(p=>p.team===S.club&&p.contract<=0).forEach(p=>{if(Math.random()<.55)p.team="FREE AGENT";else p.contract=2});
+ S.draft=newDraft();
+ S.news.unshift(`Welcome to ${S.season}. Offseason completed.`);
+ if(S.retirements.length)S.news.unshift(`Retirements: ${S.retirements.join(", ")}.`);
+ save();render();
+}
+function setT(k,v){S[k]=v;save();render()}
+function tradeModal(){
+ const others=S.players.filter(p=>p.team!==S.club&&p.team!=="RETIRED"&&p.team!=="FREE AGENT").sort((a,b)=>b.ovr-a.ovr).slice(0,30);
+ const fas=freeAgents().sort((a,b)=>b.ovr-a.ovr).slice(0,15);
+ modal(`<div class="row"><h2>Trade & Free Agency</h2><button onclick="closeModal()">×</button></div>
+ <h3>Trade targets</h3>${others.map(p=>`<div class="listitem row"><span><b>${p.name}</b> · ${p.role} · OVR ${p.ovr} · POT ${p.pot}</span><button onclick="negotiateTrade('${p.id}')">Offer</button></div>`).join("")}
+ <h3 style="margin-top:14px">Free agents</h3>${fas.map(p=>`<div class="listitem row"><span>${p.name} · ${p.role} · OVR ${p.ovr} · $${p.salary.toFixed(2)}m</span><button onclick="signFreeAgent('${p.id}')">Sign</button></div>`).join("")||"<div class='muted'>No free agents.</div>"}
+ <div class="actions"><button onclick="closeModal()">Close</button></div>`);
+}
+function tradeFor(id){let target=S.players.find(p=>p.id===id), sell=S.players.find(p=>p.team===S.club&&p.id!==id&&p.ovr<=target.ovr+5);if(!target||!sell){alert("You need a club player to offer.");return}target.team=S.club;sell.team="TRADED";S.log.unshift(`Trade completed: ${target.name} acquired for ${sell.name}.`);closeModal();save();render()}
+function draftModal(){let rows=S.draft.slice(0,20);modal(`<div class="row"><h2>National Draft</h2><button onclick="closeModal()">×</button></div><p class="muted">Pick a prospect. Draft order alternates by round.</p>${rows.map((p,i)=>`<div class="listitem row"><span><b>${i+1}. ${p.name}</b> · ${p.pos} · OVR ${p.ovr} · POT ${p.pot}</span><button onclick="draftPick(${i})">Draft</button></div>`).join("")}`)}
+function draftPick(i){let d=S.draft[i];if(!d)return;let p={id:uid(),name:d.name,pos:d.pos,age:d.age,ovr:d.ovr,pot:d.pot,trait:TRAITS[rnd(0,TRAITS.length-1)],fitness:100,morale:80,form:70,speed:d.speed,kick:d.kick,mark:d.mark,tackle:rnd(50,90),clear:d.clear,decision:rnd(50,90),goals:0,disp:0,marks:0,tackles:0,clearances:0,injury:0,contract:3,salary:.15,team:S.club,role:roleFor(d.pos),games:0,careerGoals:0,careerDisp:0,careerAwards:0,injuryHistory:0};S.players.push(p);S.draft.splice(i,1);S.log.unshift(`Drafted ${p.name} at pick ${i+1}.`);closeModal();save();render()}
+function modal(x){document.getElementById("modal").innerHTML=`<div class="modalbox">${x}</div>`;document.getElementById("modal").classList.add("show")}
+function closeModal(){document.getElementById("modal").classList.remove("show")}
+function home(){let next=opp();return `<div class="grid">
+<div class="card s3"><div class="muted">Club</div><div class="kpi">${S.club}</div><select onchange="S.club=this.value;S.players.forEach(p=>{if(!p.team)p.team=S.club});save();render()">${CLUBS.map(c=>`<option ${c===S.club?"selected":""}>${c}</option>`).join("")}</select></div>
+<div class="card s3"><div class="muted">Record</div><div class="kpi">${S.wins}-${S.losses}-${S.draws}</div><span class="small">Round ${S.round}/23</span></div>
+<div class="card s3"><div class="muted">Squad OVR</div><div class="kpi">${strength()}</div><span class="small">Morale ${S.morale} · Fitness ${S.fitness}</span></div>
+<div class="card s3"><div class="muted">Budget</div><div class="kpi">$${S.cash.toFixed(2)}m</div><span class="small">Cap $${S.salary.toFixed(2)}m / $${S.cap.toFixed(2)}m</span></div>
+<div class="card s8"><h2>Next Match</h2><div class="notice row"><div><b>${S.club}</b><div class="small muted">Round ${S.round}</div></div><div class="score">VS</div><div style="text-align:right"><b>${next}</b><div class="small muted">Away</div></div></div><div class="actions"><button class="primary" onclick="simulateMatch()">▶ Simulate Match</button><button onclick="train()">Skills Training</button><button onclick="train('fitness')">Fitness Training</button><button onclick="recover()">Recovery</button></div></div>
+<div class="card s4"><h2>Board</h2><div class="kpi">${S.board}/100</div><div class="bar"><i style="width:${S.board}%"></i></div><div class="notice">Expectation: ${S.board>70?"Challenge for finals":S.board>45?"Push for finals":"Improve competitiveness"}</div></div>
+<div class="card s6"><h2>Club News</h2>${(S.news.slice(0,6).length?S.news.slice(0,6):S.log.slice(0,6)).map(x=>`<div class="listitem">${x}</div>`).join("")||"<div class='muted'>Start your career by playing the first match.</div>"}</div>
+<div class="card s6"><h2>Recent Results</h2>${S.history.slice(0,5).map(x=>`<div class="listitem row"><span>R${x.round} vs ${x.opponent}</span><b>${x.for}-${x.against}</b></div>`).join("")||"<div class='muted'>No matches played.</div>"}</div></div>`}
+function squad(){let ps=teamList();if(!ps.length){S.players.forEach((p,i)=>{if(i<30)p.team=S.club});ps=teamList();save()}return `<div class="grid"><div class="card s9"><div class="row"><div><h2>Squad</h2><span class="muted">${S.selected.length}/22 selected</span></div><button onclick="modal(playerForm())">Player Search</button></div><div class="scroll"><table><tr><th></th><th>Player</th><th>Pos</th><th>Age</th><th>OVR</th><th>POT</th><th>Form</th><th>Fit</th><th>Trait</th><th>Contract</th></tr>${ps.map(p=>`<tr><td><button class="${S.selected.includes(p.id)?"selected":""}" onclick="selectPlayer('${p.id}')">${S.selected.includes(p.id)?"✓":"+"}</button></td><td><b>${p.name}</b></td><td>${p.pos}</td><td>${p.age}</td><td>${p.ovr}</td><td>${p.pot}</td><td>${p.form}</td><td>${p.injury?`INJ ${p.injury}`:p.fitness+"%"}</td><td>${p.trait}</td><td>${p.contract}y</td></tr>`).join("")}</table></div></div><div class="card s3"><h2>List Tools</h2><div class="actions"><button onclick="tradeModal()">Trade Centre</button><button onclick="draftModal()">Draft</button></div><div class="actions"><button onclick="showListRules()">List Rules</button></div><div class="notice">Salary $${S.salary.toFixed(2)}m / $${S.cap.toFixed(2)}m</div>${ps.filter(p=>p.contract<=1).slice(0,8).map(p=>`<div class="listitem row"><span>${p.name}<br><span class="small muted">Contract expires</span></span><button onclick="negotiate(S.players.find(x=>x.id==='${p.id}'))">Re-sign</button></div>`).join("")}</div></div>`}
+function lineupView(){
+  const ps=teamList().filter(p=>!p.injury);
+  const groups={DEF:7,MID:8,RUC:2,FWD:5};
+  return `<div class="grid"><div class="card s8"><div class="row"><div><h2>Matchday Line-up</h2><div class="muted">7 DEF · 8 MID · 2 RUC · 5 FWD · 4 interchange</div></div><button class="primary" onclick="autoLineup()">Auto Select Best 22</button></div>
+  ${Object.entries(groups).map(([pos,n])=>`<h3 style="margin-top:13px">${pos} — ${S.lineup[pos]?.length||0}/${n}</h3>
+  <div class="statgrid">${ps.filter(p=>p.pos===pos).sort((a,b)=>b.ovr-a.ovr).slice(0,12).map(p=>`<button class="${S.lineup[pos]?.includes(p.id)?"selected":""}" onclick="toggleLineup('${pos}','${p.id}',${n})">${p.name}<br><span class="small">${p.ovr} OVR · ${p.fitness}%</span></button>`).join("")}</div>`).join("")}</div>
+  <div class="card s4"><h2>Interchange</h2>${S.bench.map(id=>{let p=S.players.find(x=>x.id===id);return p?`<div class="listitem row"><span>${p.name}</span><span>${p.pos}</span></div>`:""}).join("")||"<div class='muted'>Auto-select to populate.</div>"}
+  <div class="notice">Injuries automatically rule players out of selection.</div></div></div>`;
+}
+function toggleLineup(pos,id,max){
+  S.lineup[pos]=S.lineup[pos]||[];
+  if(S.lineup[pos].includes(id))S.lineup[pos]=S.lineup[pos].filter(x=>x!==id);
+  else if(S.lineup[pos].length<max)S.lineup[pos].push(id);
+  S.selected=Object.values(S.lineup).flat();
+  const starters=new Set(S.selected);
+  S.bench=teamList().filter(p=>!starters.has(p.id)&&!p.injury).sort((a,b)=>b.ovr-a.ovr).slice(0,4).map(p=>p.id);
+  save();render();
+}
+
+function showListRules(){
+ modal(`<h2>AFL List Management</h2><div class="notice">Senior list target: 36–44 players</div><div class="notice">Rookie / development spots: up to 8 represented in this simplified simulator.</div><div class="notice">Salary cap: $${S.cap.toFixed(2)}m · Current: $${S.salary.toFixed(2)}m</div><div class="notice">Players can retire, be delisted, traded or signed as free agents.</div><div class="actions"><button onclick="closeModal()">Close</button></div>`);
+}
+function records(){
+ const ps=[...S.players].sort((a,b)=>(b.careerDisp||0)-(a.careerDisp||0)).slice(0,20);
+ return `<div class="grid"><div class="card s8"><h2>Career Records</h2><table><tr><th>Player</th><th>Age</th><th>Games</th><th>Career Disp</th><th>Career Goals</th><th>Awards</th></tr>${ps.map(p=>`<tr><td>${p.name}</td><td>${p.age}</td><td>${p.games||0}</td><td>${p.careerDisp||0}</td><td>${p.careerGoals||0}</td><td>${p.careerAwards||0}</td></tr>`).join("")}</table></div><div class="card s4"><h2>Universe</h2><div class="statgrid"><div class="stat">Reputation<br><b>${S.reputation}</b></div><div class="stat">Seasons<br><b>${S.awards.length}</b></div><div class="stat">Retired this offseason<br><b>${S.retirements.length}</b></div></div></div></div>`;
+}
+function playerForm(){return `<h2>Player Development</h2><p class="muted">Click a player in Squad for deeper information in the next build.</p><div class="actions"><button onclick="closeModal()">Close</button></div>`}
+function tactics(){return `<div class="grid"><div class="card s6"><h2>Game Plan</h2><div class="actions">${["Balanced","Fast","Possession"].map(x=>`<button class="${S.gamePlan===x?"selected":""}" onclick="setT('gamePlan','${x}')">${x}</button>`).join("")}</div><h3 style="margin-top:15px">Attack</h3><div class="actions">${["Balanced","Aggressive","Controlled"].map(x=>`<button class="${S.attack===x?"selected":""}" onclick="setT('attack','${x}')">${x}</button>`).join("")}</div><h3 style="margin-top:15px">Defence</h3><div class="actions">${["Balanced","Press","Conservative"].map(x=>`<button class="${S.defence===x?"selected":""}" onclick="setT('defence','${x}')">${x}</button>`).join("")}</div><h3 style="margin-top:15px">Clearances</h3><div class="actions">${["Balanced","Aggressive","Defensive"].map(x=>`<button class="${S.clearance===x?"selected":""}" onclick="setT('clearance','${x}')">${x}</button>`).join("")}</div></div>
+<div class="card s6"><h2>Staff</h2><div class="listitem">Head Coach <b>${S.staff.coach}</b> <span class="badge">${S.coach}</span></div><div class="listitem">Fitness <b>${S.staff.fitness}</b></div><div class="listitem">Recruiting <b>${S.staff.recruiting}</b></div><div class="listitem">Development <b>${S.staff.development}</b></div><div class="listitem">Medical <b>${S.staff.medical}</b></div><div class="actions"><button onclick="S.coach=clamp(S.coach+1,40,95);S.staff.development++;save();render()">Staff development</button><button onclick="modal('<h2>Hire Staff</h2><div class=notice>Staff recruitment system: choose from generated candidates in the next hiring window.</div><div class=actions><button onclick=closeModal()>Close</button></div>')">Hire</button></div></div></div>`}
+function stats(){let ps=[...S.players].sort((a,b)=>b.disp-a.disp);return `<div class="grid"><div class="card s8"><h2>Player Statistics</h2><table><tr><th>Player</th><th>Pos</th><th>Disp</th><th>Goals</th><th>Marks</th><th>Tackles</th><th>Clear</th></tr>${ps.slice(0,25).map(p=>`<tr><td>${p.name}</td><td>${p.pos}</td><td>${p.disp}</td><td>${p.goals}</td><td>${p.marks}</td><td>${p.tackles}</td><td>${p.clearances}</td></tr>`).join("")}</table></div><div class="card s4"><h2>Club Leaders</h2>${["disp","goals","marks","tackles","clearances"].map(k=>{let p=[...S.players].sort((a,b)=>b[k]-a[k])[0];return `<div class="listitem row"><span>${k}</span><b>${p?.name||"-"} ${p?`(${p[k]})`:""}</b></div>`}).join("")}</div></div>`}
+function ladderView(){let l=ladder();return `<div class="card"><h2>AFL Ladder — ${S.season}</h2><table><tr><th>#</th><th>Club</th><th>P</th><th>W</th><th>D</th><th>L</th><th>PF</th><th>PA</th><th>%</th></tr>${l.map((x,i)=>`<tr style="${x.club===S.club?"background:#16304c":""}"><td>${i+1}</td><td><b>${x.club}</b></td><td>${x.p}</td><td>${x.w}</td><td>${x.d}</td><td>${x.l}</td><td>${x.for}</td><td>${x.against}</td><td>${x.against?((x.for/x.against)*100).toFixed(1):"100.0"}</td></tr>`).join("")}</table></div>`}
+function draftView(){return `<div class="grid"><div class="card s8"><h2>National Draft</h2><p class="muted">Potential is hidden until scouted. Recruiting staff improve information quality.</p><table><tr><th>Pick</th><th>Prospect</th><th>Pos</th><th>Age</th><th>OVR</th><th>Scouting</th><th></th></tr>${S.draft.slice(0,35).map((p,i)=>`<tr><td>${i+1}</td><td>${p.name}</td><td>${p.pos}</td><td>${p.age}</td><td>${p.ovr}</td><td>${p.scouted?(p.pot+" · "+p.scoutText):"Unknown"}</td><td><button onclick="scoutProspect(${i})">${p.scouted?"Rescout":"Scout"}</button> <button onclick="draftPick(${i})">Draft</button></td></tr>`).join("")}</table></div><div class="card s4"><h2>Recruiting Department</h2><div class="kpi">${S.staff.recruiting}</div><div class="notice">Scouting reports become more reliable as Recruiting improves.</div><div class="actions"><button onclick="S.staff.recruiting=clamp(S.staff.recruiting+2,40,95);save();render()">Develop Recruiting</button></div></div></div>`}
+function career(){let l=ladder();return `<div class="grid"><div class="card s6"><h2>Career History</h2><div class="notice">Coach reputation: <b>${S.reputation}</b></div>${S.awards.map(a=>`<div class="listitem"><b>${a.season}</b> — ${a.rank}th · ${a.wins}-${a.losses} · Board ${a.board}</div>`).join("")||"<div class='muted'>No completed seasons.</div>"}</div><div class="card s6"><h2>Club Records</h2><div class="statgrid"><div class="stat">Seasons<br><b>${S.awards.length}</b></div><div class="stat">Wins<br><b>${S.awards.reduce((a,x)=>a+x.wins,0)+S.wins}</b></div><div class="stat">Best finish<br><b>${S.awards.length?Math.min(...S.awards.map(x=>x.rank)): "—"}</b></div></div><div class="actions"><button class="danger" onclick="if(confirm('Erase career?')){localStorage.removeItem('aflManagerV2');location.reload()}">Erase Career</button></div></div></div>`}
+function newsView(){return `<div class="grid"><div class="card s8"><h2>AFL News</h2>${S.news.length?S.news.map(n=>`<div class="listitem">${n}</div>`).join(""):"<div class='muted'>No news yet.</div>"}</div><div class="card s4"><h2>Coach Reputation</h2><div class="kpi">${S.reputation}</div><div class="bar"><i style="width:${S.reputation}%"></i></div><div class="notice">${S.reputation>80?"Elite coach":"Building your reputation"}</div></div></div>`}
+function render(){document.getElementById("top").innerHTML=`${S.season} · R${Math.min(S.round,23)} · ${S.club}`;let tabs=["Home","Squad","Line-up","Tactics","Ladder","Draft","Stats","News","Records","Career"];document.getElementById("tabs").innerHTML=tabs.map(t=>`<button class="${S.tab===t?"active":""}" onclick="S.tab='${t}';save();render()">${t}</button>`).join("");let c=S.tab==="Home"?home():S.tab==="Squad"?squad():S.tab==="Line-up"?lineupView():S.tab==="Tactics"?tactics():S.tab==="Ladder"?ladderView():S.tab==="Draft"?draftView():S.tab==="Stats"?stats():S.tab==="News"?newsView():S.tab==="Records"?records():career();document.getElementById("app").innerHTML=c}
+
+/* ===== AFL MANAGER V5 SYSTEMS ===== */
+(function(){
+  const oldInit=window.init;
+  const ensureV5=()=>{
+    try{
+      if(!window.S || !window.S.players) return;
+      S.v5=S.v5||{};
+      S.v5.version=5;
+      S.v5.scouting=S.v5.scouting||{};
+      S.v5.media=S.v5.media||[];
+      S.v5.press=S.v5.press||[];
+      S.v5.relationships=S.v5.relationships||{};
+      S.v5.facilities=S.v5.facilities||{training:1,medical:1,recovery:1,recruiting:1,academy:1};
+      S.v5.coach=S.v5.coach||{club:S.club,reputation:50,career:[]};
+      S.v5.jobOffers=S.v5.jobOffers||[];
+      S.v5.contractTalks=S.v5.contractTalks||{};
+      S.v5.live=S.v5.live||null;
+      (S.players||[]).forEach(p=>{
+        p.role=p.role||p.position||"Utility";
+        p.roleFamiliarity=p.roleFamiliarity||{};
+        p.roleFamiliarity[p.role]=p.roleFamiliarity[p.role]||80;
+        p.personality=p.personality||["Professional","Competitive","Team Player","Ambitious","Laid-back"][Math.floor(Math.random()*5)];
+        p.hidden=p.hidden||{bigGame:50+Math.floor(Math.random()*45),pressure:50+Math.floor(Math.random()*45),coachability:50+Math.floor(Math.random()*45)};
+        p.injuryDetail=p.injuryDetail||null;
+        p.relationships=p.relationships||[];
+      });
+      save();
+    }catch(e){console.warn("V5 init",e)}
+  };
+  window.ensureAFLV5=ensureV5;
+  window.addEventListener("load",()=>setTimeout(ensureV5,50));
+
+  const oldRender=window.render;
+  if(typeof oldRender==="function"){
+    window.render=function(){
+      try{ensureV5();}catch(e){}
+      return oldRender.apply(this,arguments);
+    }
+  }
+
+  window.v5ScoutingReport=function(team){
+    const opp=(team||"").toLowerCase();
+    const players=(S.players||[]).filter(p=>(p.team||"").toLowerCase()===opp);
+    const mids=players.filter(p=>/mid|wing|ruck/i.test((p.role||p.position||"")));
+    return {
+      opponent:team||"Opposition",
+      strength:mids.length?"Centre stoppage and clearance pressure":"Balanced structure",
+      weakness:players.length?"Transition defence can be targeted":"Limited scouting data",
+      keyPlayers:players.slice().sort((a,b)=>(b.overall||b.rating||0)-(a.overall||a.rating||0)).slice(0,3).map(p=>p.name),
+      style: players.length ? "Pressure and contested football" : "Unknown"
+    };
+  };
+
+  window.v5ApplyMatchPlan=function(plan){
+    S.v5=S.v5||{};
+    S.v5.matchPlan=plan;
+    if(typeof save==="function") save();
+    if(typeof render==="function") render();
+  };
+
+  window.v5LiveDecision=function(decision){
+    S.v5=S.v5||{};
+    S.v5.live=S.v5.live||{decisions:[]};
+    S.v5.live.decisions.push({decision,quarter:S.quarter||1,time:Date.now()});
+    S.v5.live.lastDecision=decision;
+    if(typeof save==="function") save();
+    if(typeof render==="function") render();
+  };
+
+  window.v5NegotiateContract=function(playerId, salary, years){
+    const p=(S.players||[]).find(x=>String(x.id)===String(playerId));
+    if(!p) return {ok:false,message:"Player not found"};
+    const ask=p.salary||salary;
+    const gap=Math.abs(Number(salary)-Number(ask));
+    const accept=Number(salary)>=Number(ask)*0.88 && Number(years)>=1;
+    S.v5.contractTalks[playerId]={salary:Number(salary),years:Number(years),status:accept?"Accepted":"Counter-offer"};
+    if(accept){p.salary=Number(salary);p.contractYears=Number(years);}
+    if(typeof save==="function") save();
+    return {ok:accept,message:accept?"Contract accepted":"Player wants a better offer"};
+  };
+
+  window.v5FacilityUpgrade=function(key){
+    S.v5=S.v5||{};
+    S.v5.facilities=S.v5.facilities||{};
+    const lvl=S.v5.facilities[key]||1;
+    const cost=lvl*250000;
+    if((S.cash||S.money||0)<cost) return false;
+    if("cash" in S) S.cash-=cost; else S.money-=cost;
+    S.v5.facilities[key]=lvl+1;
+    if(typeof save==="function") save();
+    if(typeof render==="function") render();
+    return true;
+  };
+})();
+
+init();render();
+</script>
+
+<section id="v5Dashboard" style="margin:24px auto;max-width:1100px;padding:18px;border:1px solid #334155;border-radius:16px;background:#0f172a;color:#e2e8f0">
+<h2 style="margin:0 0 10px">V5 Manager Hub</h2>
+<p style="opacity:.8;margin-top:0">Live tactics • scouting • player personalities • contracts • facilities • coaching career</p>
+<div id="v5HubGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">
+<div><b>Opposition Scouting</b><div id="v5Scout">Ready</div></div>
+<div><b>Match Plan</b><div id="v5Plan">Balanced</div></div>
+<div><b>Facilities</b><div id="v5Facilities">Training 1 · Medical 1 · Recovery 1 · Recruiting 1</div></div>
+<div><b>Coach Career</b><div id="v5Career">Reputation building</div></div>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px">
+<button onclick="v5LiveDecision('Protect corridor')">Protect corridor</button>
+<button onclick="v5LiveDecision('Attack corridor')">Attack corridor</button>
+<button onclick="v5LiveDecision('Extra stoppage numbers')">Extra stoppage numbers</button>
+<button onclick="v5LiveDecision('Tag opposition star')">Tag opposition star</button>
+</div>
+</section>
+<script>
+(function(){
+ function hub(){
+   try{
+    if(!window.S||!S.v5)return;
+    const f=S.v5.facilities||{};
+    const set=(id,t)=>{const e=document.getElementById(id);if(e)e.textContent=t};
+    set('v5Plan',(S.v5.matchPlan||'Balanced'));
+    set('v5Facilities',`Training ${f.training||1} · Medical ${f.medical||1} · Recovery ${f.recovery||1} · Recruiting ${f.recruiting||1}`);
+    set('v5Career',`Reputation ${S.v5.coach?.reputation||50}`);
+   }catch(e){}
+ }
+ setInterval(hub,800); window.addEventListener('load',hub);
+})();
+</script>
+
+/* ===== AFL MANAGER V6: MATCHDAY / TACTICS / HISTORY / AI ===== */
+(function(){
+  function ensure(){
+    if(!window.S) return;
+    S.v6=S.v6||{};
+    S.v6.version=6;
+    S.v6.tactics=S.v6.tactics||{style:"Balanced",risk:"Medium",pressure:"Standard",corridor:"Balanced"};
+    S.v6.staff=S.v6.staff||[
+      {role:"Assistant Coach",name:"Alex Morgan",rating:78},
+      {role:"Development Coach",name:"Chris Taylor",rating:75},
+      {role:"Head of Fitness",name:"Jordan Lee",rating:77},
+      {role:"Medical Manager",name:"Sam Wilson",rating:80},
+      {role:"Recruiting Manager",name:"Ben Carter",rating:76}
+    ];
+    S.v6.academy=S.v6.academy||[];
+    S.v6.history=S.v6.history||[];
+    S.v6.records=S.v6.records||{};
+    S.v6.news=S.v6.news||[];
+    S.v6.ai=S.v6.ai||{};
+    S.v6.live=S.v6.live||{quarter:1,clock:"20:00",homeScore:0,awayScore:0,events:[],momentum:50};
+    S.v6.salary=S.v6.salary||{cap:20100000,committed:0};
+    if(typeof save==="function") save();
+  }
+
+  window.v6Ensure=ensure;
+  window.v6SetTactic=function(key,value){
+    ensure(); S.v6.tactics[key]=value;
+    if(typeof save==="function") save(); renderV6();
+  };
+  window.v6LiveCall=function(call){
+    ensure();
+    const t=S.v6.tactics;
+    if(call==="Attack") {t.style="Attack";t.risk="High";t.corridor="Aggressive";}
+    if(call==="Control") {t.style="Control";t.risk="Low";t.corridor="Safe";}
+    if(call==="Pressure") {t.style="Pressure";t.pressure="High";}
+    if(call==="Counter") {t.style="Counterattack";t.corridor="Rebound";}
+    S.v6.live.events.push({q:S.v6.live.quarter,call,time:new Date().toLocaleTimeString()});
+    S.v6.live.momentum=Math.max(0,Math.min(100,S.v6.live.momentum+(call==="Pressure"?7:call==="Attack"?5:call==="Control"?-2:3)));
+    if(typeof save==="function") save(); renderV6();
+  };
+  window.v6GenerateAcademy=function(){
+    ensure();
+    const names=["Luca","Mason","Cooper","Finn","Jai","Noah","Ethan","Max","Kai","Riley","Archer","Harrison"];
+    const roles=["Midfielder","Forward","Defender","Wing","Ruck"];
+    const p={
+      id:"acad_"+Date.now(),name:names[Math.floor(Math.random()*names.length)]+" "+["Smith","Brown","Wilson","Jones","Taylor"][Math.floor(Math.random()*5)],
+      age:17,team:"Academy",role:roles[Math.floor(Math.random()*roles.length)],
+      overall:60+Math.floor(Math.random()*15),potential:78+Math.floor(Math.random()*22),
+      traits:["Elite kicking","Explosive","Strong overhead","Clean hands","Great decision making"][Math.floor(Math.random()*5)],
+      scouted:false
+    };
+    S.v6.academy.push(p);
+    if(typeof save==="function") save(); renderV6();
+  };
+  window.v6ScoutAcademy=function(id){
+    ensure(); const p=S.v6.academy.find(x=>x.id===id); if(!p)return;
+    p.scouted=true;p.scoutReport=`Potential ${p.potential}/100 • ${p.traits}`;
+    if(typeof save==="function")save();renderV6();
+  };
+  window.v6AddNews=function(headline,detail){
+    ensure();S.v6.news.unshift({headline,detail,date:new Date().toLocaleDateString()});S.v6.news=S.v6.news.slice(0,30);
+    if(typeof save==="function")save();renderV6();
+  };
+  window.v6Record=function(key,value){
+    ensure(); if(!S.v6.records[key] || value>S.v6.records[key]) S.v6.records[key]=value;
+    if(typeof save==="function")save();
+  };
+  window.v6ResetLive=function(){
+    ensure();S.v6.live={quarter:1,clock:"20:00",homeScore:0,awayScore:0,events:[],momentum:50};
+    if(typeof save==="function")save();renderV6();
+  };
+
+  function renderV6(){
+    ensure();
+    const root=document.getElementById("v6Hub");
+    if(!root)return;
+    const t=S.v6.tactics, l=S.v6.live;
+    const fac=S.v5?.facilities||{};
+    const academy=S.v6.academy||[];
+    root.innerHTML=`
+      <div class="v6grid">
+        <div><h3>🎮 Match Day</h3><b>Q${l.quarter} • ${l.clock}</b><div class="score">${l.homeScore} — ${l.awayScore}</div>
+        <div>Momentum: ${l.momentum}%</div>
+        <div class="v6buttons">
+          <button onclick="v6LiveCall('Attack')">Attack</button><button onclick="v6LiveCall('Control')">Control</button>
+          <button onclick="v6LiveCall('Pressure')">Pressure</button><button onclick="v6LiveCall('Counter')">Counter</button>
+          <button onclick="v6ResetLive()">Reset match</button></div></div>
+        <div><h3>🧠 Tactical Plan</h3><div>Style: <b>${t.style}</b></div><div>Risk: ${t.risk}</div><div>Pressure: ${t.pressure}</div><div>Corridor: ${t.corridor}</div></div>
+        <div><h3>👔 Staff</h3>${S.v6.staff.map(x=>`<div>${x.role}: <b>${x.rating}</b> — ${x.name}</div>`).join("")}</div>
+        <div><h3>💰 Salary Cap</h3><div>Cap: $${(S.v6.salary.cap/1e6).toFixed(2)}m</div><div>Committed: $${(S.v6.salary.committed/1e6).toFixed(2)}m</div></div>
+      </div>
+      <div class="v6section"><h3>🌱 Academy</h3><button onclick="v6GenerateAcademy()">Generate prospect</button>
+      ${academy.length?academy.slice(-6).map(p=>`<div class="academy"><b>${p.name}</b> • ${p.role} • ${p.overall} OVR ${p.scouted?`• ${p.scoutReport}`:"• <i>Unscouted</i>"} <button onclick="v6ScoutAcademy('${p.id}')">Scout</button></div>`).join(""):"<p>No prospects yet.</p>"}</div>
+      <div class="v6section"><h3>📰 AFL World</h3>${(S.v6.news||[]).slice(0,5).map(n=>`<div><b>${n.headline}</b><br><span>${n.detail||""}</span></div>`).join("")||"<p>The AFL world is quiet.</p>"}</div>
+      <div class="v6section"><h3>📜 Career & Records</h3>${Object.keys(S.v6.records).length?Object.entries(S.v6.records).map(([k,v])=>`<div>${k}: <b>${v}</b></div>`).join(""):"<p>Records will appear as your universe develops.</p>"}</div>`;
+  }
+  window.renderV6=renderV6;
+  window.addEventListener("load",()=>{setTimeout(()=>{ensure();renderV6()},100)});
+  setInterval(renderV6,1200);
+})();
+
+<section id="v6Hub" style="max-width:1100px;margin:24px auto;padding:18px;border-radius:16px;background:#111827;color:#e5e7eb;border:1px solid #374151">
+<h2 style="margin-top:0">AFL Manager V7 — Matchday & AFL Universe</h2>
+<p style="opacity:.8">Tactics, live coaching calls, staff, academy prospects, salary-cap tracking, news and career records.</p>
+</section>
+<style>
+#v6Hub button{margin:4px;padding:7px 10px;border-radius:8px;border:1px solid #4b5563;background:#1f2937;color:#fff;cursor:pointer}
+.v6grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}.v6grid>div,.v6section{padding:12px;background:#1f2937;border-radius:12px;margin-bottom:12px}.score{font-size:28px;font-weight:700;margin:8px 0}.v6section h3{margin-top:0}.academy{padding:7px 0;border-top:1px solid #374151}
+</style>
+
+/* ===== AFL MANAGER V7: FOOTBALL SIMULATION LAYER ===== */
+(function(){
+  function ensure(){
+    if(!window.S)return;
+    S.v7=S.v7||{};
+    S.v7.version=7;
+    S.v7.match=S.v7.match||{active:false,q:1,clock:20*60,home:0,away:0,momentum:50,events:[],fatigue:{},ratings:{},subs:[],instructions:{}};
+    S.v7.training=S.v7.training||{focus:"Balanced",load:"Medium"};
+    S.v7.medical=S.v7.medical||{};
+    S.v7.awards=S.v7.awards||[];
+    S.v7.hof=S.v7.hof||[];
+    S.v7.rivalries=S.v7.rivalries||{};
+    S.v7.demands=S.v7.demands||[];
+    (S.players||[]).forEach(p=>{
+      p.form=p.form??50;p.confidence=p.confidence??50;p.fatigue=p.fatigue??0;
+      p.tog=p.tog??0;p.position=p.position||p.role||"Utility";
+    });
+    if(typeof save==="function")save();
+  }
+  window.v7Ensure=ensure;
+
+  const names=["wins clearance","hits a target","takes a contested mark","lays a huge tackle","wins a one-on-one","gets a stoppage clearance","launches a rebound","kicks inside 50"];
+  function event(){
+    ensure(); const ps=(S.players||[]).filter(p=>p.team===S.club && !p.injured);
+    if(!ps.length)return;
+    const p=ps[Math.floor(Math.random()*ps.length)];
+    const text=`${p.name} ${names[Math.floor(Math.random()*names.length)]}.`;
+    const positive=Math.random()>.42;
+    p.tog=Math.min(100,(p.tog||0)+1);
+    p.fatigue=Math.min(100,(p.fatigue||0)+0.7);
+    p.confidence=Math.max(0,Math.min(100,(p.confidence||50)+(positive?1.2:-0.5)));
+    S.v7.match.events.unshift({q:S.v7.match.q,time:S.v7.match.clock,text,player:p.name});
+    if(positive)S.v7.match.momentum=Math.min(100,S.v7.match.momentum+1.5);
+    else S.v7.match.momentum=Math.max(0,S.v7.match.momentum-.8);
+    if(Math.random()<.12){
+      if(positive)S.v7.match.home+=Math.random()<.28?6:1;
+      else S.v7.match.away+=Math.random()<.25?6:1;
+    }
+  }
+  window.v7Tick=function(){
+    ensure(); const m=S.v7.match;
+    if(!m.active)return;
+    for(let i=0;i<3;i++)event();
+    m.clock-=15;
+    if(m.clock<=0){
+      if(m.q<4){m.q++;m.clock=20*60;S.v7.match.events.unshift({q:m.q,time:m.clock,text:`Quarter ${m.q} begins.`});}
+      else {m.active=false;S.v7.awards.push({type:"Match result",score:`${m.home}-${m.away}`,date:new Date().toLocaleDateString()});}
+    }
+    if(typeof save==="function")save();renderV7();
+  };
+  window.v7StartMatch=function(){
+    ensure();S.v7.match={active:true,q:1,clock:20*60,home:0,away:0,momentum:50,events:[],fatigue:{},ratings:{},subs:[],instructions:{}};
+    (S.players||[]).forEach(p=>{p.tog=0;p.fatigue=0});
+    if(typeof save==="function")save();renderV7();
+  };
+  window.v7Instruction=function(id,instruction){
+    ensure();S.v7.match.instructions[id]=instruction;
+    if(typeof save==="function")save();renderV7();
+  };
+  window.v7Sub=function(id){
+    ensure(); if(S.v7.match.subs.length>=4)return;
+    S.v7.match.subs.push(id);
+    const p=(S.players||[]).find(x=>String(x.id)===String(id));if(p)p.fatigue=Math.max(0,p.fatigue-20);
+    if(typeof save==="function")save();renderV7();
+  };
+  window.v7Training=function(focus,load){
+    ensure();S.v7.training={focus,load};
+    (S.players||[]).filter(p=>p.team===S.club).forEach(p=>{
+      const gain=load==="High"?1.4:load==="Low"?.5:1;
+      p.form=Math.min(100,(p.form||50)+gain);
+      p.fatigue=Math.max(0,(p.fatigue||0)+(load==="High"?6:load==="Low"?1:3));
+    });
+    if(typeof save==="function")save();renderV7();
+  };
+  window.v7Demand=function(id,text){
+    ensure();const p=(S.players||[]).find(x=>String(x.id)===String(id));if(!p)return;
+    S.v7.demands.push({id,text,status:"Open"});
+    if(typeof save==="function")save();renderV7();
+  };
+  window.v7ResolveDemand=function(i,action){
+    ensure();const d=S.v7.demands[i];if(!d)return;d.status=action;
+    const p=(S.players||[]).find(x=>String(x.id)===String(d.id));
+    if(p){p.confidence=Math.max(0,Math.min(100,(p.confidence||50)+(action==="Accepted"?12:-10)));}
+    if(typeof save==="function")save();renderV7();
+  };
+  window.v7Award=function(type,player){
+    ensure();S.v7.awards.push({type,player,date:new Date().toLocaleDateString()});
+    if(typeof save==="function")save();renderV7();
+  };
+  window.v7Rivalry=function(a,b){
+    ensure();const k=[a,b].sort().join(" vs ");S.v7.rivalries[k]=(S.v7.rivalries[k]||0)+1;
+    if(typeof save==="function")save();renderV7();
+  };
+
+  function renderV7(){
+    ensure();const root=document.getElementById("v7Hub");if(!root)return;
+    const m=S.v7.match, mins=Math.max(0,Math.floor(m.clock/60)),secs=Math.max(0,m.clock%60);
+    const team=(S.players||[]).filter(p=>p.team===S.club && !p.injured).slice(0,12);
+    root.innerHTML=`
+      <h2 style="margin-top:0">V7 Football Engine</h2>
+      <div class="v7grid">
+        <div class="v7card"><h3>🏟️ Live Match</h3><div class="v7score">${m.home} — ${m.away}</div><b>Q${m.q} ${mins}:${String(secs).padStart(2,"0")}</b><div>Momentum ${Math.round(m.momentum)}%</div><button onclick="v7StartMatch()">Start / restart</button><button onclick="v7Tick()">Advance 15 sec</button></div>
+        <div class="v7card"><h3>🎯 Training</h3><button onclick="v7Training('Skills','Medium')">Skills</button><button onclick="v7Training('Fitness','High')">Fitness</button><button onclick="v7Training('Tactics','Medium')">Tactics</button><button onclick="v7Training('Recovery','Low')">Recovery</button><p>${S.v7.training.focus} • ${S.v7.training.load}</p></div>
+        <div class="v7card"><h3>🔄 Interchange</h3>${team.slice(0,6).map(p=>`<div>${p.name} — fatigue ${Math.round(p.fatigue||0)}% <button onclick="v7Sub('${p.id}')">Rest</button></div>`).join("")}</div>
+      </div>
+      <div class="v7card"><h3>📣 Player instructions</h3>${team.slice(0,8).map(p=>`<div><b>${p.name}</b> <select onchange="v7Instruction('${p.id}',this.value)"><option>Balanced</option><option>Tag star</option><option>Attack corridor</option><option>Stay deep</option><option>Push forward</option><option>Contest stoppages</option></select> <span>confidence ${Math.round(p.confidence||50)}</span></div>`).join("")}</div>
+      <div class="v7grid"><div class="v7card"><h3>📜 Live events</h3>${m.events.slice(0,12).map(e=>`<div>Q${e.q} — ${e.text}</div>`).join("")||"No events yet."}</div>
+      <div class="v7card"><h3>🏆 Awards / History</h3>${S.v7.awards.slice(-10).reverse().map(a=>`<div><b>${a.type}</b> — ${a.player||a.score}</div>`).join("")||"No awards recorded yet."}</div></div>
+      <div class="v7card"><h3>😤 Player demands</h3>${S.v7.demands.slice(-8).map((d,i)=>{let p=(S.players||[]).find(x=>String(x.id)===String(d.id));return `<div>${p?.name||"Player"}: ${d.text} — <b>${d.status}</b> <button onclick="v7ResolveDemand(${S.v7.demands.indexOf(d)},'Accepted')">Accept</button><button onclick="v7ResolveDemand(${S.v7.demands.indexOf(d)},'Rejected')">Reject</button></div>`}).join("")||"No outstanding demands."}</div>`;
+  }
+  window.renderV7=renderV7;
+  window.addEventListener("load",()=>setTimeout(()=>{ensure();renderV7()},150));
+  setInterval(()=>{if(S?.v7?.match?.active) v7Tick()},3000);
+})();
+
+<section id="v7Hub" style="max-width:1100px;margin:24px auto;padding:18px;border-radius:16px;background:#0b1220;color:#e5e7eb;border:1px solid #334155"></section>
+<style>
+#v7Hub button{margin:3px;padding:6px 9px;border-radius:7px;border:1px solid #475569;background:#1e293b;color:#fff}
+#v7Hub select{margin:3px;padding:4px;background:#111827;color:#fff;border:1px solid #475569;border-radius:5px}
+.v7grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px}.v7card{padding:12px;background:#172033;border-radius:12px;margin:10px 0}.v7score{font-size:34px;font-weight:800;margin:5px 0}
+</style>
+</body></html>
